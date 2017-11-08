@@ -32,10 +32,16 @@ static uint16_t getCRC(void* data, uint32_t size){
 //------------------------------------------------------------------------------------
 
 
-MQSerialBridge::MQSerialBridge(PinName tx, PinName rx, uint32_t baud, uint16_t recv_buf_size, const char* cfg_topic, const char* token) 
+MQSerialBridge::MQSerialBridge(PinName tx, PinName rx, uint32_t baud, uint16_t recv_buf_size, const char* cfg_topic, MQSerialBridge::ModeType mode) 
                     : SerialTerminal(tx, rx, recv_buf_size, baud, SerialTerminal::ReceiveAfterBreakTime) {    
     _rbufsize = recv_buf_size;
-    _token = (char*)token;
+    _mode = mode;
+    if(_mode == TextMode){
+        _token = (char*)" ";
+    }
+    if(_mode == MixMode){
+        _token = (char*)"\n";
+    }
     _cfg_topic = (char*)cfg_topic;
     
     if(_rbufsize){
@@ -114,21 +120,41 @@ void MQSerialBridge::task(){
                 // se lee la trama recibida
                 uint16_t bufsize = SerialTerminal::recv(_rbuf, _rbufsize);
                 
-                // se extraen los tokens en modo texto para obtener el cuerpo del mensaje
-                int32_t data_size = bufsize - (strlen(_rbuf) + 1);
-                uint8_t* data = (uint8_t*)(_rbuf + strlen(_rbuf) + 1);
-                char* topic = strtok(_rbuf, (const char*)_token);
-                char* msg_size = strtok(0, (const char*)_token);
-                char* msg_crc = strtok(0, (const char*)_token);
-                
-                // en primer lugar se comprueba si hay datos coherentes
-                if(topic && msg_size && msg_crc && data_size >= 0){
-                    // en segundo lugar se comprueba si el tamaño de los datos coincide
-                    if(atoi(msg_size) == data_size){
-                        // a continuación se verifica si el crc de los datos es correcto
-                        if(atoi(msg_crc) == getCRC(data, data_size)){
-                            // por último se publica el mensaje
-                            MQ::MQClient::publish(topic, data, data_size, &_publicationCb);
+                // se extraen los tokens en función del modo
+                if(_mode == TextMode){
+                    char* args[MaxNumArguments];
+                    int8_t num_arg = -1;
+                    char* topic = strtok(_rbuf, (const char*)_token);
+                    do{
+                        num_arg++;
+                        args[num_arg] = strtok(0, (const char*)_token);
+                    }while(args[num_arg] != 0 && num_arg < MaxNumArguments);
+                    // por último se publica el mensaje
+                    // si sólo hay un dato asociado, se incluye de forma normal
+                    if(num_arg == 1){
+                        MQ::MQClient::publish(topic, args[0], strlen(args[0]), &_publicationCb);
+                    }
+                    // si hay varios datos, se pasa como mensaje, la referencia al array (char**) y el número de elementos
+                    else if(num_arg > 1){
+                        MQ::MQClient::publish(topic, args, num_arg, &_publicationCb);
+                    }
+                }
+                else if(_mode == MixMode){
+                    int32_t data_size = bufsize - (strlen(_rbuf) + 1);
+                    uint8_t* data = (uint8_t*)(_rbuf + strlen(_rbuf) + 1);
+                    char* topic = strtok(_rbuf, (const char*)_token);
+                    char* msg_size = strtok(0, (const char*)_token);
+                    char* msg_crc = strtok(0, (const char*)_token);
+                    
+                    // en primer lugar se comprueba si hay datos coherentes
+                    if(topic && msg_size && msg_crc && data_size >= 0){
+                        // en segundo lugar se comprueba si el tamaño de los datos coincide
+                        if(atoi(msg_size) == data_size){
+                            // a continuación se verifica si el crc de los datos es correcto
+                            if(atoi(msg_crc) == getCRC(data, data_size)){
+                                // por último se publica el mensaje
+                                MQ::MQClient::publish(topic, data, data_size, &_publicationCb);
+                            }
                         }
                     }
                 }
@@ -147,7 +173,12 @@ void MQSerialBridge::subscriptionCb(const char* topic, void* msg, uint16_t msg_l
         while(SerialTerminal::busy()){
             Thread::yield();
         }
-        sprintf(_tbuf, "%s\n%d\n%d\n", topic, msg_len, msg_crc);
+        if(_mode == TextMode){
+            sprintf(_tbuf, "%s ", topic);
+        }
+        else if(_mode == MixMode){
+            sprintf(_tbuf, "%s\n%d\n%d\n", topic, msg_len, msg_crc);
+        }
         char* data = (char*)(_tbuf + strlen(_tbuf) + 1);
         memcpy(data, msg, msg_len);
         SerialTerminal::send(_tbuf, msg_len + strlen(_tbuf) + 1, _cb_tx);
@@ -158,8 +189,7 @@ void MQSerialBridge::subscriptionCb(const char* topic, void* msg, uint16_t msg_l
     // si es una suscripción nueva
     if(strstr(topic, "/suscr") != 0){
         char* susc_topic = strtok((char*)msg, (const char*)_token);
-        char* susc_msg_size = strtok(0, (const char*)_token);
-        if(susc_topic && susc_msg_size){
+        if(susc_topic){
             MQ::MQClient::subscribe(susc_topic, &_subscriptionCb);
         }        
     }    

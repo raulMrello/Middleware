@@ -9,29 +9,12 @@
  *  Este módulo recibirá publicaciones a través de un enlace serie y las insertará como si las hubiera publicado su propio
  *  cliente.
  *  Por otro lado, los topics a los que esté suscrito, los replicará hacia el enlace serie.
- *  El protocolo será una mezcla de modo texto y binario, utilizando un espacio en blanco (BREAK) como delimitador de trama.
- *  El formato de los mensajes será el siguiente:
+ *
+ *  El protocolo podrá configurarse en modo texto (con espacios) o modo mixto con (\n). Por ejemplo:
  *  
- *      TOPIC \n TAMAÑO_DATOS \n CRC32_DATOS \n\0 DATOS[n] 
+ *  Modo Texto: topic/to/pub DATO0 DATO1 DATO2 DATON[ \0]
+ *  Modo Mixto: topic/to/pub[\n]data_size[\n]data_crc16[\n]data...[\n\0] 
  * 
- *  El topic, el tamaño y el crc vendrán en modo texto y los datos en binario como un array de bytes. Se chequeará que tanto 
- *  el tamaño como el crc concuerdan, para darlo por bueno.
- *
- *  Además este módulo escucha publicaciones en el topic por defecto ($cfg_topic = "mqserialbridge") aunque puede cambiarse en 
- *  el constructor, de forma que desde el enlace serie se podrá configurar su funcionamiento, por ejemplo para realizar las 
- *  siguientes funciones.
- *
- *  Suscripción a topics: 
- *      TOPIC = $cfg_topic/suscr
- *      SIZE  = strlen(DATA)+1
- *      CRC32 = crc32(DATA, strlen(DATA)+1)
- *      DATA  = "topic_a_suscribirse\nTamaño_del_mensaje_asociado\n\0"   (DATA_ARGS = 2)
- *
- *  Publicación remota a topic: 
- *      TOPIC = topic/a/publicar
- *      SIZE  = sizeof(DATA)
- *      CRC32 = crc32(DATA, sizeof(DATA))
- *      DATA  = ...data...   (DATA_ARGS = 1)
  */
  
  
@@ -53,6 +36,15 @@
 class MQSerialBridge : public SerialTerminal {
 
 public:
+    
+    /** ModeType 
+     *  Listado de los diferentes modos de funcionamiento
+     */
+    enum ModeType{
+        TextMode,   /// Modo texto (token separador es el espacio ' ')
+        MixMode,    /// Modo mixto (token separador es el caracter '\n')
+    };
+    
     /** MQSerialBridge()
      *  Crea el objeto asignando un puerto serie para la interfaz con el equipo digital
      *  @param tx Línea tx del Puerto serie asignado
@@ -62,7 +54,7 @@ public:
      *  @param cfg_topic Topic de configuración, para ajuste de parámetros propios
      *  @param token Caracter de separación de argumentos. Por defecto '\n'
      */
-    MQSerialBridge(PinName tx, PinName rx, uint32_t baud, uint16_t recv_buf_size, const char* cfg_topic = "mqserialbridge", const char* token = "\n");
+    MQSerialBridge(PinName tx, PinName rx, uint32_t baud, uint16_t recv_buf_size, const char* cfg_topic = "mqserialbridge", ModeType mode = TextMode);
 
 
     /** addSubscription()
@@ -154,7 +146,8 @@ protected:
     char* _rbuf;                                /// Buffer para la recepción de datos
     uint16_t _rbufsize;                         /// Tamaño del buffer
     char* _token;                               /// Caracter de separación de argumentos
-    char* _cfg_topic;                           /// Topic de configuración       
+    char* _cfg_topic;                           /// Topic de configuración     
+    ModeType _mode;                             /// Modo de funcionamiento
 
 };
 

@@ -8,6 +8,10 @@ pueden ser utilizadas en cualquier proyecto.
 ## Changelog
 
 ----------------------------------------------------------------------------------------------
+##### 08.11.2017 ->commit:"Añado modos a MQSerialBridge"
+- [x] Añado modo texto y modo mixto
+	
+----------------------------------------------------------------------------------------------
 ##### 07.11.2017 ->commit:"Añado MQLib, MQSerialBridge y MQTT"
 - [x] Añado MQLib, MQSerialBridge y MQTT a este repo.
 	
