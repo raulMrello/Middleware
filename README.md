@@ -8,6 +8,10 @@ pueden ser utilizadas en cualquier proyecto.
 ## Changelog
 
 ----------------------------------------------------------------------------------------------
+##### 09.12.2018 ->commit:"MQLib autogestiona lista de tokens"
+- [x] MQLib no requiere de una lista de tokens externa. Compatible con ESP32.
+	
+----------------------------------------------------------------------------------------------
 ##### 08.11.2017 ->commit:"Añado modos a MQSerialBridge"
 - [x] Añado modo texto y modo mixto
 	

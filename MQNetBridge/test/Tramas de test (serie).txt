@@ -1,0 +1,27 @@
+
+
+EJEMPLO:
+El programa test_MQNetBridge está suscrito al topic "sta". Al recibir una actualización, la redirige
+al topic "stop"
+
+Hay que configurar MQNetBridge de esta forma:
+
+1) SUSCRIBIRSE A TOPIC LOCAL "stop"
+mqnetbridge/cmd/lsub stop $00
+
+2) CONECTAR AL SERVIDOR MQTT
+mqnetbridge/cmd/conn cli,usr,pass,192.168.254.98,1883,Invitado,11FF00DECA $00
+
+3) SUSCRIBIRSE AL TOPIC REMOTO "sta"
+mqnetbridge/cmd/rsub sta $00
+
+4) ENVIAR PUBLICACION "sta" via SerialBridge
+sta EnvioDesdeSerialBridge $00
+
+5) ENVIAR PUBLICACION "sta" via Mosquitto
+mosquitto_pub -t sta -m EnvioDesdeMosquitto
+
+6) DESCONECTAR
+mqnetbridge/cmd/disc 0 $00
+
+7) = 1) RECONECTAR

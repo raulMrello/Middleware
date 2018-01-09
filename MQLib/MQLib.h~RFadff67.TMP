@@ -67,15 +67,6 @@
 #define MQ_MUTEX_LOCK()    	 	_mutex.lock(osWaitForever)
 #define MQ_MUTEX_UNLOCK()   	_mutex.unlock()
 
-/** Portabilidad a ESP_IDF */
-#elif ESP_PLATFORM == 1
-#include "mbed.h"
-#include "Mutex.h"
-#include "Callback.h"
-#define MQ_MUTEX				Mutex
-#define MQ_MUTEX_LOCK()    	 	_mutex.lock(osWaitForever)
-#define MQ_MUTEX_UNLOCK()   	_mutex.unlock()
-
 /** Portabilidad a cmsis_os utilizando un módulo Callback adaptado */
 #else
 #include "cmsis_os.h"
@@ -144,6 +135,17 @@ enum ErrorResult{
     OUT_OF_BOUNDS,          ///< Fallo por exceso de tamaño
 };
 	
+/** @enum HierarchyLevels
+ *  @brief Niveles de jerarquía en los topics
+ */
+enum HierarchyLevels{
+	NumLevels_4 = 4,      	///< 4 niveles (-> _token_bits = 16)
+	NumLevels_5,          	///< 5 niveles (-> _token_bits = 13)
+	NumLevels_6,           	///< 6 niveles (-> _token_bits = 10)
+	NumLevels_7,           	///< 7 niveles (-> _token_bits = 9)
+	NumLevels_8,           	///< 8 niveles (-> _token_bits = 8)
+};
+   
     
 /** @struct MQ::topic_t
  *  @brief Tipo definido para definir el identificador de un topic
@@ -175,18 +177,8 @@ class MQBroker {
 public:	    
 
     /** @fn start
-     *  @brief Inicializa el broker MQ estableciendo el número máximo de caracteres en los topics
-     *         Este constructor se utiliza cuando no se proporciona una lista de tokens externa, sino
-     *         que se crea conforme se realizan las diferentes suscripciones a topics.
-     *  @param max_len_of_name Número de caracteres máximo que puede tener un topic (incluyendo '\0' final)
-     *  @return Código de error
-     */
-    static int32_t start(uint8_t max_len_of_name) {
-        return start(0, 0, max_len_of_name);
-    }
-
-    /** @fn start
-     *  @brief Inicializa el broker MQ estableciendo la siguiente configuración:
+     *  @brief Inicializa el broker MQ estableciendo el número máximo de jerarquías en el
+     *          nombre de los topics. 
      *  @param token_list Lista predefinida de tokens
 	 *	@param token_count Máximo número de tokens en la lista
      *  @param max_len_of_name Número de caracteres máximo que puede tener un topic (incluyendo '\0' final)
@@ -195,19 +187,9 @@ public:
     static int32_t start(const char** token_list, uint32_t token_count, uint8_t max_len_of_name) {
         // ajusto parámetros por defecto 
         _max_name_len = max_len_of_name-1;
-        _tokenlist_internal = false;
         _token_provider = token_list;
         // copio el número de tokens y reservo los wildcard (n.a.,+,#) con valores 0,1,2
         _token_provider_count = token_count + WildcardCOUNT;
-        if(!_token_provider || token_count == 0){
-            _tokenlist_internal = true;
-            token_count = DefaultMaxNumTokenEntries;
-            _token_provider_count = 0;
-            _token_provider = (const char**)Heap::memAlloc(token_count * sizeof(const char*));
-            if(!_token_provider){
-                return NULL_POINTER;
-            }
-        }
         
         // si hay un número de tokens mayor que el tamaño que lo puede alojar, devuelve error:
         // ej: token_count = 500 con token_t = uint8_t, que sólo puede codificar hasta 256 valores.
@@ -278,15 +260,7 @@ public:
             return (EXISTS);
         }
 		
-		// si el topic no existe:
-        // si la lista de tokens es automantenida, crea los ids de los tokens no existentes
-        if(_tokenlist_internal){
-            if(!generateTokens(name)){
-                MQ_MUTEX_UNLOCK();
-				return(OUT_OF_MEMORY);
-            }
-        }
-        // lo crea reservarvando espacio para el topic
+		// si el topic no existe, lo crea reservarvando espacio para el topic
         topic = (MQ::Topic*)Heap::memAlloc(sizeof(MQ::Topic));
         if(!topic){
             MQ_MUTEX_UNLOCK();
@@ -372,35 +346,24 @@ public:
 		// obtiene el identificador del topic a publicar
         MQ::topic_t topic_id;
         createTopicId(&topic_id, name);
-                
+        
         // recorre la lista de topics buscando aquellos que coincidan, teniendo en cuenta el tamaño del token_id
         // dado por _token_bits
         MQ_MUTEX_LOCK();
-        
-        // copia el mensaje a enviar por si sufre modificaciones, no alterar el origen
-        char* mem_data = (char*)Heap::memAlloc(datasize);
-        if(!mem_data){
-            MQ_MUTEX_UNLOCK();
-            return NULL_POINTER;
-        }
-        
         MQ::Topic* topic = _topic_list->getFirstItem();
         while(topic){
             // comprueba si el id coincide o si no se usa (=0)
             if(matchIds(&topic_id, &topic->id)){
-                // si coinciden, se invoca a todos los suscriptores                
+                // si coinciden, se invoca a todos los suscriptores
                 MQ::SubscribeCallback *sbc = topic->subscriber_list->getFirstItem();
                 while(sbc){
-                    // restaura el mensaje por si hubiera sufrido modificaciones en algún suscriptor
-                    memcpy(mem_data, data, datasize);
-                    sbc->call(name, mem_data, datasize);
+                    sbc->call(name, data, datasize);
                     sbc = topic->subscriber_list->getNextItem();
                 }                    
             }
             topic = _topic_list->getNextItem();
         }
         publisher->call(name, SUCCESS);
-        Heap::memFree(mem_data);
         MQ_MUTEX_UNLOCK();
 		return SUCCESS;
     }
@@ -518,9 +481,6 @@ protected:
         WildcardCOUNT,
     };    
     
-    /** Máximo número de tokens permitidos en topic provider auto-gestionado */
-    static const uint16_t DefaultMaxNumTokenEntries = (256 - WildcardCOUNT);    
-    
     /** Posición del campo de tamaño especial uint16_t */
     static const uint8_t AddrField = 1;
     
@@ -534,7 +494,6 @@ protected:
     static const char** _token_provider;
     static uint32_t _token_provider_count;
     static uint8_t _token_bits;
-    static bool _tokenlist_internal;
 
 	/** Mutex */
     static MQ_MUTEX _mutex;
@@ -558,47 +517,6 @@ protected:
             topic = _topic_list->getNextItem();
         }
         return NULL;
-    }
- 
-
-    /** @fn generateTokens 
-     *  @brief Genera los tokens no existentes en la lista auto-gestionada
-     *  @param name nombre del topic a procesar
-     *  @return True Topic insertado, False error en el topic
-     */
-    static bool generateTokens(const char* name){
-        char* token = (char*)Heap::memAlloc(strlen(name));
-        if(!token){
-            return false;
-        }
-        uint8_t to=0, from=0;
-        bool is_final = false;
-        getNextDelimiter(name, &from, &to, &is_final);
-        while(from < to){
-            bool exists = false;
-            for(int i=0;i<_token_provider_count;i++){
-                // si el token ya existe o es un wildcard, pasa al siguiente
-                if(name[from] == '#' || name[from] == '+' || strncmp(_token_provider[i], &name[from], to-from)==0){
-                    exists = true;
-                    break;
-                }
-            }
-            // tras recorrer todo el árbol, si no existe lo añade
-            if(!exists){
-                char* new_token = (char*)Heap::memAlloc(1+to-from);
-                if(!new_token){
-                    Heap::memFree(token);
-                    return false;
-                }
-                strncpy(new_token, &name[from], (to-from)); new_token[to-from] = 0;
-                _token_provider[_token_provider_count] = new_token;
-                _token_provider_count++;
-            }
-            from = to+1;
-            getNextDelimiter(name, &from, &to, &is_final);
-        }
-        Heap::memFree(token);
-        return true;
     }
 
  
@@ -733,39 +651,18 @@ protected:
      */
     static bool matchIds(MQ::topic_t* found_id, MQ::topic_t* search_id){
         for(int i=0;i<MQ::MAX_TOKEN_LEVEL;i++){
-            if(i == AddrField){
-                uint32_t search_idex = (((uint32_t)search_id->tk[i]) << (8 * sizeof(MQ::token_t))) + search_id->tk[i+1];       
-                uint32_t found_idex = (((uint32_t)found_id->tk[i]) << (8 * sizeof(MQ::token_t))) + found_id->tk[i+1];       
-                // si ha llegado al final de la cadena de búsqueda sin errores, es que coincide...
-                if(search_idex == WildcardNotUsed){
-                    return true;
-                }
-                // si ha encontrado un wildcard All, es que coincide
-                if(found_idex == WildcardAll){
-                    return true;
-                }
-                
-                // si no coinciden ni hay wildcards '+' involucrados, no hay coincidencia
-                if(found_idex != WildcardAny && found_idex != search_idex){
-                    return false;
-                }
-                // descarta el 2º subcampo
-                i++;
+            // si ha llegado al final de la cadena de búsqueda sin errores, es que coincide...
+            if(search_id->tk[i] == WildcardNotUsed){
+                return true;
             }
-            else{
-                // si ha llegado al final de la cadena de búsqueda sin errores, es que coincide...
-                if(search_id->tk[i] == WildcardNotUsed){
-                    return true;
-                }
-                // si ha encontrado un wildcard All, es que coincide
-                if(found_id->tk[i] == WildcardAll){
-                    return true;
-                }
-                
-                // si no coinciden ni hay wildcards '+' involucrados, no hay coincidencia
-                if(found_id->tk[i] != WildcardAny && found_id->tk[i] != search_id->tk[i]){
-                    return false;
-                }
+            // si ha encontrado un wildcard All, es que coincide
+            if(found_id->tk[i] == WildcardAll){
+                return true;
+            }
+            
+            // si no coinciden ni hay wildcards '+' involucrados, no hay coincidencia
+            if(found_id->tk[i] != WildcardAny && found_id->tk[i] != search_id->tk[i]){
+                return false;
             }
             // en otro caso, es que coinciden y por lo tanto sigue analizando siguientes elementos
         }        
@@ -853,19 +750,6 @@ public:
     static uint8_t getMaxTopicLen(){
         return MQBroker::getMaxTopicLenReq();
     }        
-    
-
-    
-    /** @fn isTopicToken 
-     *  @brief Chequea si el token final de un topic coincide. Por ejemplo al comparar el topic
-     *         "topic/a/b/c" con el token "/c" devolverá True, ya que el topic termina con ese token.
-     *  @param topic Topic completo a comparar
-     *  @param token token con el que comparar al final del topic
-     *  @return True si coincide, False si no coincide
-     */
-    static inline bool isTopicToken(const char* topic, const char* token){
-        return ((strcmp(topic + strlen(topic) - strlen(token), token) == 0)? true : false);
-    }
 };
 
 } /* End of namespace MQ */

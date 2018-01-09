@@ -10,11 +10,20 @@
  *  cliente.
  *  Por otro lado, los topics a los que esté suscrito, los replicará hacia el enlace serie.
  *
- *  El protocolo podrá configurarse en modo texto (con espacios) o modo mixto con (\n). Por ejemplo:
- *  
- *  Modo Texto: topic/to/pub DATO0 DATO1 DATO2 DATON[ \0]
- *  Modo Mixto: topic/to/pub[\n]data_size[\n]data_crc16[\n]data...[\n\0] 
- * 
+ *  Las tramas tendrán un formato dependiendo del modo, así:
+ *
+ *      MODO TEXTO: "TOPIC MENSAJE<\0>"
+ *
+ *      TOPIC: Cadena de texto con el nombre del topic, ej: "este/ess/un/topic"
+ *      MENSAJE: Mensaje en el que pueden agruparse parámetros separados por comas, ej: "mensaje,arg0,arg1,arg2"
+ *      \0: La trama siempre debe terminar con el caracter NULL.
+ *
+ *
+ *      MODO MIXTO: "TOPIC<\n>MENSAJE<\n><\0>"
+ *
+ *      TOPIC: Cadena de texto con el nombre del topic, ej: "este/ess/un/topic"
+ *      MENSAJE: Mensaje en el que pueden agruparse parámetros separados por comas, ej: "mensaje,arg0,arg1,arg2"
+ *      \0: La trama siempre debe terminar con el caracter NULL.
  */
  
  

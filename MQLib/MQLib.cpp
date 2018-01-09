@@ -8,18 +8,29 @@
 #include "MQLib.h"
 
 /** Mutex para MQBroker */
-#if (!defined(__MBED__) || (__MBED__ != 1))
+
+// portabilidad a mbed-os
+#if __MBED__ == 1 
+MQ_MUTEX MQ::MQBroker::_mutex;
+
+// portabilidad a esp-idf
+#elif ESP_PLATFORM == 1
+MQ_MUTEX MQ::MQBroker::_mutex;
+
+// portabilidad a cmsis-rtos
+#else 
 osMutexDef (_mutdef);
 MQ_MUTEX MQ_MUTEX_CREATE(void){
     return osMutexCreate(osMutex(_mutdef));
 }
 #endif
-MQ_MUTEX MQ::MQBroker::_mutex;
+
 
 /** Lista de topics */
 List<MQ::Topic> * MQ::MQBroker::_topic_list = 0;
 
-/** Registro del elemento proporcionador de los topics */
+/** Variables para el control de tokens y topics */
+bool MQ::MQBroker::_tokenlist_internal = false;
 const char** MQ::MQBroker::_token_provider = 0;
 uint32_t MQ::MQBroker::_token_provider_count = 0;
 uint8_t MQ::MQBroker::_token_bits = 0;

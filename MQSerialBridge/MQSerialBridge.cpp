@@ -98,11 +98,10 @@ void MQSerialBridge::onTxComplete(){
 void MQSerialBridge::task(){    
     
     // se suscribe a todos los topics de configuración
-    char* all_cfg_topics = (char*)Heap::memAlloc(MQ::MQClient::getMaxTopicLen());
+    char* all_cfg_topics = (char*)Heap::memAlloc(strlen(_cfg_topic) + strlen("/#")+1);
     if(all_cfg_topics){
         sprintf(all_cfg_topics, "%s/#", _cfg_topic);
         MQ::MQClient::subscribe(all_cfg_topics, &_subscriptionCb);
-        Heap::memFree(all_cfg_topics);
     }
     
     // Inicializo el terminal de recepción    
@@ -132,7 +131,7 @@ void MQSerialBridge::task(){
                     // por último se publica el mensaje
                     // si sólo hay un dato asociado, se incluye de forma normal
                     if(num_arg == 1){
-                        MQ::MQClient::publish(topic, args[0], strlen(args[0]), &_publicationCb);
+                        MQ::MQClient::publish(topic, args[0], strlen(args[0])+1, &_publicationCb);
                     }
                     // si hay varios datos, se pasa como mensaje, la referencia al array (char**) y el número de elementos
                     else if(num_arg > 1){
@@ -190,7 +189,11 @@ void MQSerialBridge::subscriptionCb(const char* topic, void* msg, uint16_t msg_l
     if(strstr(topic, "/suscr") != 0){
         char* susc_topic = strtok((char*)msg, (const char*)_token);
         if(susc_topic){
-            MQ::MQClient::subscribe(susc_topic, &_subscriptionCb);
+            char *st = (char*)Heap::memAlloc(strlen(susc_topic)+1);
+            if(st){
+                strcpy(st, susc_topic);
+                MQ::MQClient::subscribe(st, &_subscriptionCb);
+            }
         }        
     }    
 }

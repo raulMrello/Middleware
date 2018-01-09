@@ -14,7 +14,11 @@ public:
     }
 
     int read(unsigned char* buffer, int len, int timeout) {
-        return socket->recv(buffer, len);
+        int rc = socket->recv(buffer, len);
+        if(rc == NSAPI_ERROR_WOULD_BLOCK){
+            rc = 0;
+        }
+        return rc;
     }
 
     int write(unsigned char* buffer, int len, int timeout) {
@@ -29,7 +33,20 @@ public:
     int disconnect() {
         return socket->close();
     }
-
+    
+    /** Set blocking or non-blocking mode of the socket
+     *
+     *  Initially all sockets are in blocking mode. In non-blocking mode
+     *  blocking operations such as send/recv/accept return
+     *  NSAPI_ERROR_WOULD_BLOCK if they can not continue.
+     *
+     *  set_blocking(false) is equivalent to set_timeout(-1)
+     *  set_blocking(true) is equivalent to set_timeout(0)
+     *
+     *  @param blocking true for blocking mode, false for non-blocking mode.
+     */
+    void set_blocking(bool blocking){ socket->set_blocking(blocking); }
+    
 private:
     NetworkInterface* network;
     TCPSocket* socket;
