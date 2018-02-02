@@ -8,6 +8,10 @@ pueden ser utilizadas en cualquier proyecto.
 ## Changelog
 
 ----------------------------------------------------------------------------------------------
+##### 02.02.2018 ->commit:"Importantes mejoras en MQLib y StateMachine"
+- [x] Actualizaciones importantes tras portabilidad a ESP-IDF
+	
+----------------------------------------------------------------------------------------------
 ##### 09.12.2018 ->commit:"MQLib autogestiona lista de tokens"
 - [x] MQLib no requiere de una lista de tokens externa. Compatible con ESP32.
 	

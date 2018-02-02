@@ -11,10 +11,20 @@ Para su funcionamiento cuenta con dos utilidades básicas:
 - Módulo List: que permite crear listas doblemente enlazadas de items (donde cada item es un puntero a un objeto).
 - Módulo Heap: que permite gestionar diferentes tipos de memoria dinámica (malloc, memoryPool, etc...)
 
-
+- Versión 2.0.0
   
 ## Changelog
 
+----------------------------------------------------------------------------------------------
+##### 02.02.2018 ->commit:"Versión 2.0.0"
+- [x] Realizo las siguientes mejoras y correcciones de bugs:
+	- Permite no usar lista de tokens predefinida.
+	- Añade trazas de depuración
+	- Compatibilidad con MBED-OS y ESP-IDF
+	- Corrige bug en <matchIds>
+	- Corrige bugs de cálculo de fin de tabla
+	- Corrige otros bugs menores.
+      
 ----------------------------------------------------------------------------------------------
 ##### 17.10.2017 ->commit:"Incluyo identificador como topic_t y límite de niveles"
 - [x] Incluyo límite de niveles con MAX_TOKEN_LEVEL y objetos MQ::topic_t para los identificadores.

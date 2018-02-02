@@ -29,8 +29,14 @@
 #ifndef STATEMACHINE_H
 #define STATEMACHINE_H
 
-
+#if __MBED__ == 1 || ESP_PLATFORM == 1
 #include "mbed.h"
+
+#elif ESP_PLATFORM == 1
+#include "mbed.h"
+
+#endif
+
 #include "Heap.h"
   
 //---------------------------------------------------------------------------------
@@ -273,7 +279,7 @@ public:
         }
     } 
          
-protected:  
+private:
 
     const State::Msg _entryMsg;
     const State::Msg _exitMsg;

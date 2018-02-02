@@ -119,7 +119,7 @@ public:
      */
     T* searchItem(T* item);
 
-protected:
+private:
 	
     /** Estructura de los items a insertar en la lista */
     struct ListItem{

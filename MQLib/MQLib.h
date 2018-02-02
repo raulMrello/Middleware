@@ -40,9 +40,9 @@
  *  de los topics. El wildcard es '@' de esta forma se genera un ámbito "scope" al que se dirige el mensaje. Dicho scope 
  *  está formado por un valor uint32_t.
  *
- *  Por ejemplo para dirigir mensajes concretos al grupo 3, el topic dedicado será de la forma "@group:3/..." O para mensajes
- *  a un dispositivo, por ejemplo el 8976: "@dev:8976/...". De igual forma, se podrán realizar suscripciones, por ejemplo a
- *  todos los topics con destino el grupo 78: "@group:78/#".
+ *  Por ejemplo para dirigir mensajes concretos al grupo 3, el topic dedicado será de la forma "@group/3/..." O para mensajes
+ *  a un dispositivo, por ejemplo el 8976: "@dev/8976/...". De igual forma, se podrán realizar suscripciones, por ejemplo a
+ *  todos los topics con destino el grupo 78: "@group/78/#".
  *
  *  En caso de no utilizar el wildcard "scope", su valor será 0 y se considerará un topic general.
  *
@@ -87,6 +87,10 @@ MQ_MUTEX MQ_MUTEX_CREATE(void);
 
 #endif
 
+#define MQ_DEBUG_TRACE(format, ...)			\
+if(_defdbg){								\
+	printf(format, ##__VA_ARGS__);			\
+}
 
 //------------------------------------------------------------------------------------
 //------------------------------------------------------------------------------------
@@ -94,6 +98,7 @@ MQ_MUTEX MQ_MUTEX_CREATE(void);
 
 namespace MQ{	
     
+
     
 /** @struct MQ::MAX_TOKEN_LEVEL
  *  @brief Tipo definido para definir la profundidad máxima de los topics
@@ -118,6 +123,8 @@ typedef const char* Token;
  */
 #if __MBED__ == 1    
 typedef Callback<void(const char* name, void*, uint16_t)> SubscribeCallback;
+#elif ESP_PLATFORM == 1
+typedef Callback<void(const char* name, void*, uint16_t)> SubscribeCallback;
 #else    
 typedef FuncPtr3<void, const char* name, void*, uint16_t> SubscribeCallback;
 #endif
@@ -126,6 +133,8 @@ typedef FuncPtr3<void, const char* name, void*, uint16_t> SubscribeCallback;
  *  @brief Tipo definido para las callbacs de publicación
  */
 #if __MBED__ == 1    
+typedef Callback<void(const char* name, int32_t)> PublishCallback;
+#elif ESP_PLATFORM == 1
 typedef Callback<void(const char* name, int32_t)> PublishCallback;
 #else
 typedef FuncPtr2<void, const char* name, int32_t> PublishCallback;
@@ -148,7 +157,7 @@ enum ErrorResult{
 /** @struct MQ::topic_t
  *  @brief Tipo definido para definir el identificador de un topic
  */
-__packed struct topic_t{
+struct __packed topic_t{
     uint8_t tk[MQ::MAX_TOKEN_LEVEL+1];
 };
 
@@ -179,10 +188,11 @@ public:
      *         Este constructor se utiliza cuando no se proporciona una lista de tokens externa, sino
      *         que se crea conforme se realizan las diferentes suscripciones a topics.
      *  @param max_len_of_name Número de caracteres máximo que puede tener un topic (incluyendo '\0' final)
+     *  @param defdbg Flag para activar las trazas de depuración por defecto
      *  @return Código de error
      */
-    static int32_t start(uint8_t max_len_of_name) {
-        return start(0, 0, max_len_of_name);
+    static int32_t start(uint8_t max_len_of_name, bool defdbg = false) {
+        return start(0, 0, max_len_of_name, defdbg);
     }
 
     /** @fn start
@@ -190,19 +200,22 @@ public:
      *  @param token_list Lista predefinida de tokens
 	 *	@param token_count Máximo número de tokens en la lista
      *  @param max_len_of_name Número de caracteres máximo que puede tener un topic (incluyendo '\0' final)
+     *  @param defdbg Flag para activar las trazas de depuración por defecto
      *  @return Código de error
      */
-    static int32_t start(const char** token_list, uint32_t token_count, uint8_t max_len_of_name) {
+    static int32_t start(const char** token_list, uint32_t token_count, uint8_t max_len_of_name, bool defdbg = false) {
         // ajusto parámetros por defecto 
+    	_defdbg = defdbg;
         _max_name_len = max_len_of_name-1;
         _tokenlist_internal = false;
         _token_provider = token_list;
+        MQ_DEBUG_TRACE("\r\n[MQLib]\t Iniciando Broker...");
         // copio el número de tokens y reservo los wildcard (n.a.,+,#) con valores 0,1,2
         _token_provider_count = token_count + WildcardCOUNT;
         if(!_token_provider || token_count == 0){
             _tokenlist_internal = true;
             token_count = DefaultMaxNumTokenEntries;
-            _token_provider_count = 0;
+            _token_provider_count = WildcardCOUNT;
             _token_provider = (const char**)Heap::memAlloc(token_count * sizeof(const char*));
             if(!_token_provider){
                 return NULL_POINTER;
@@ -217,7 +230,7 @@ public:
         
         // si no hay lista inicial, se crea...
         if(!_topic_list){
-            #if !defined(__MBED__)
+            #if !defined(__MBED__) && ESP_PLATFORM != 1
             _mutex = MQ_MUTEX_CREATE();
             #endif
             MQ_MUTEX_LOCK();
@@ -260,6 +273,7 @@ public:
         if(strlen(name) > _max_name_len){
             return OUT_OF_BOUNDS;
         }
+        MQ_DEBUG_TRACE("\r\n[MQLib]\t Iniciando suscripción a [%s]", name);
         // Inicia la búsqueda del topic para ver si ya existe
         MQ_MUTEX_LOCK();
         MQ::Topic * topic = findTopicByName(name);		
@@ -274,11 +288,13 @@ public:
 				return err;
 			}
 			// si existe, devuelve el error
+			MQ_DEBUG_TRACE("\r\n[MQLib]\t ERR_SUBSC. El suscriptor ya existe");
 			MQ_MUTEX_UNLOCK();
             return (EXISTS);
         }
 		
 		// si el topic no existe:
+        MQ_DEBUG_TRACE("\r\n[MQLib]\t Creando topic [%s]", name);
         // si la lista de tokens es automantenida, crea los ids de los tokens no existentes
         if(_tokenlist_internal){
             if(!generateTokens(name)){
@@ -296,7 +312,7 @@ public:
         // se fijan los parámetros del token (delimitadores, id, nombre)
         topic->name = name;
         createTopicId(&topic->id, name);
-        
+
         // se crea la lista de suscriptores
         topic->subscriber_list = new List<MQ::SubscribeCallback>();
         if(!topic->subscriber_list){
@@ -369,10 +385,12 @@ public:
             return OUT_OF_BOUNDS;
         }
 
+        MQ_DEBUG_TRACE("\r\n[MQLib]\t Iniciando publicación en '%s' con '%d' datos.", name, datasize);
+
 		// obtiene el identificador del topic a publicar
         MQ::topic_t topic_id;
         createTopicId(&topic_id, name);
-                
+
         // recorre la lista de topics buscando aquellos que coincidan, teniendo en cuenta el tamaño del token_id
         // dado por _token_bits
         MQ_MUTEX_LOCK();
@@ -381,27 +399,35 @@ public:
         char* mem_data = (char*)Heap::memAlloc(datasize);
         if(!mem_data){
             MQ_MUTEX_UNLOCK();
+            MQ_DEBUG_TRACE("\r\n[MQLib]\t ERR_HEAP_ALLOC");
             return NULL_POINTER;
         }
         
+        MQ_DEBUG_TRACE("\r\n[MQLib]\t Buscando topic '%s' en la lista", name);
         MQ::Topic* topic = _topic_list->getFirstItem();
+        bool notify_subscriber = false;
         while(topic){
+        	MQ_DEBUG_TRACE("\r\n[MQLib]\t Comparando topic '%s' con '%s'", name, topic->name);
             // comprueba si el id coincide o si no se usa (=0)
-            if(matchIds(&topic_id, &topic->id)){
+            if(matchIds(&topic->id, &topic_id)){
+            	MQ_DEBUG_TRACE("\r\n[MQLib]\t Topic '%s' encontrado. Buscando suscriptores...", name);
                 // si coinciden, se invoca a todos los suscriptores                
                 MQ::SubscribeCallback *sbc = topic->subscriber_list->getFirstItem();
                 while(sbc){
                     // restaura el mensaje por si hubiera sufrido modificaciones en algún suscriptor
                     memcpy(mem_data, data, datasize);
+                    MQ_DEBUG_TRACE("\r\n[MQLib]\t Notificando topic update de '%s' al suscriptor %x", name, (uint32_t)sbc);
+                    notify_subscriber = true;
                     sbc->call(name, mem_data, datasize);
                     sbc = topic->subscriber_list->getNextItem();
                 }                    
             }
             topic = _topic_list->getNextItem();
         }
-        publisher->call(name, SUCCESS);
+        publisher->call(name, (notify_subscriber)? SUCCESS : NOT_FOUND);
         Heap::memFree(mem_data);
         MQ_MUTEX_UNLOCK();
+        MQ_DEBUG_TRACE("\r\n[MQLib]\t Fin de la publicación del topic '%s'", name);
 		return SUCCESS;
     }
 
@@ -424,7 +450,7 @@ public:
      */
     static void getTopicNameReq(char* name, uint8_t len, MQ::topic_t* id){
         strcpy(name, "");
-		if(!_token_provider || _token_provider_count == 0){
+		if((_token_provider && _token_provider_count == 0) || (!_token_provider && _token_provider_count <= WildcardCOUNT)){
             return;
         }
 
@@ -459,7 +485,7 @@ public:
                 // calcula el identificador extendido
                 idex = (((uint32_t)id->tk[i]) << (8 * sizeof(MQ::token_t))) + id->tk[i+1];       
                 // comprueba si el nombre contiene el wildcard de direccionamiento
-                if(strchr(name, WildcardScope) != 0){
+                if(name[0] == WildcardScope){
                     // en ese caso, añado el nombre numérico
                     char num[16];
                     sprintf(num, "%d/", idex);
@@ -508,7 +534,7 @@ public:
         return _max_name_len;
     }               
 
-protected:
+private:
 	
     /** Identificador de wildcards */
     enum Wildcards{
@@ -542,6 +568,7 @@ protected:
     /** Límite de tamaño en nombres de topcis */
     static uint8_t _max_name_len;
  
+    static bool _defdbg;
 
     /** @fn findTopicByName 
      *  @brief Busca un topic por medio de su nombre, descendiendo por la jerarquía hasta
@@ -576,9 +603,9 @@ protected:
         getNextDelimiter(name, &from, &to, &is_final);
         while(from < to){
             bool exists = false;
-            for(int i=0;i<_token_provider_count;i++){
+            for(int i = WildcardCOUNT;i <_token_provider_count;i++){
                 // si el token ya existe o es un wildcard, pasa al siguiente
-                if(name[from] == '#' || name[from] == '+' || strncmp(_token_provider[i], &name[from], to-from)==0){
+                if(name[from] == '#' || name[from] == '+' || strncmp(_token_provider[i-WildcardCOUNT], &name[from], to-from)==0){
                     exists = true;
                     break;
                 }
@@ -591,7 +618,7 @@ protected:
                     return false;
                 }
                 strncpy(new_token, &name[from], (to-from)); new_token[to-from] = 0;
-                _token_provider[_token_provider_count] = new_token;
+                _token_provider[_token_provider_count-WildcardCOUNT] = new_token;
                 _token_provider_count++;
             }
             from = to+1;
@@ -611,6 +638,7 @@ protected:
     static void createTopicId(MQ::topic_t* id, const char* name){
         uint8_t from = 0, to = 0;
         bool is_final = false;
+        MQ_DEBUG_TRACE("\r\n[MQLib]\t Generando ID para el topic [%s]", name);
         int pos = 0; 
         // Inicializo el contenido del identificador para marcar como no usado
         for(int i=0;i<MQ::MAX_TOKEN_LEVEL;i++){
@@ -620,38 +648,43 @@ protected:
         // obtiene los delimitadores para buscar tokens
         getNextDelimiter(name, &from, &to, &is_final);
         while(from < to){
+        	MQ_DEBUG_TRACE("\r\n[MQLib]\t Procesando topic [%s], delimitadores (%d,%d)", name, from, to);
             uint32_t token = WildcardNotUsed;
             // chequea si es un campo extendido
             if(pos == AddrField){
                 // chequea si es un wildcard
                 if(strncmp(&name[from], "+", to-from)==0){
+                	MQ_DEBUG_TRACE("\r\n[MQLib]\t Detectado wildcard (+) en delimitadores (%d,%d)", from, to);
                     token = WildcardAny;
                 }            
                 else if(strncmp(&name[from], "#", to-from)==0){
+                	MQ_DEBUG_TRACE("\r\n[MQLib]\t Detectado wildcard (#) en delimitadores (%d,%d)", from, to);
                     token = WildcardAll;
                 } 
                 // en caso contrario...
                 else{
                     bool match = false;
                     // comprueba si viene precedido del wildcard de direccionamiento
-                    for(int j=0;j<to;j++){
-                        if(name[j] == WildcardScope){
-                            match = true;
-                            break;
-                        }
-                    }
+                    if(name[0] == WildcardScope){
+                    	MQ_DEBUG_TRACE("\r\n[MQLib]\t Analizando token1. Detectado wildcard (@) en token0");
+						match = true;
+						break;
+					}
                     // si es un campo numérico...
                     if(match){
                         // aplica el número
                         char num[16];
                         strncpy(num, &name[from], to-from);
-                        token = atoi(num);                        
+                        token = atoi(num);
+                        MQ_DEBUG_TRACE("\r\n[MQLib]\t Analizando token1. Detectado campo numérico [%d]", token);
                     }
                     // sino, busca el token
                     else{
-                        for(int i=0;i<_token_provider_count;i++){                
+                    	MQ_DEBUG_TRACE("\r\n[MQLib]\t Analizando token1. No es un número, buscando token para delimitadores (%d,%d)", from, to);
+                        for(int i=0;i<(_token_provider_count - WildcardCOUNT);i++){
                             // si encuentra el token... actualiza el id
                             if(strncmp(_token_provider[i], &name[from], to-from)==0){
+                            	MQ_DEBUG_TRACE("\r\n[MQLib]\t Analizando token1. Encontrado token [%s]", _token_provider[i]);
                                 token  = i + WildcardCOUNT;
                                 break;
                             }
@@ -666,9 +699,11 @@ protected:
             } 
             // si no es un campo extendido, busca el texto
             else{
-                for(int i=0;i<_token_provider_count;i++){                
+            	MQ_DEBUG_TRACE("\r\n[MQLib]\t Analizando tokenX. Buscando token para delimitadores (%d,%d)", from, to);
+                for(int i=0;i<(_token_provider_count - WildcardCOUNT);i++){
                     // si encuentra el token... actualiza el id
                     if(strncmp(_token_provider[i], &name[from], to-from)==0){
+                    	MQ_DEBUG_TRACE("\r\n[MQLib]\t Analizando tokenX. Encontrado token [%s]", _token_provider[i]);
                         token  = i + WildcardCOUNT;
                         break;
                     }
@@ -702,7 +737,7 @@ protected:
         }
         // se inicia la búsqueda, si parte de un espaciador, lo descarta
         if(name[*from] == '/'){
-            *from++;
+            (*from)++;
         }
         *to = *from;
         for(int i = *from; i <= len; i++){
@@ -733,9 +768,11 @@ protected:
      */
     static bool matchIds(MQ::topic_t* found_id, MQ::topic_t* search_id){
         for(int i=0;i<MQ::MAX_TOKEN_LEVEL;i++){
+        	MQ_DEBUG_TRACE("\r\n[MQLib]\t Comparando token_%d...", i);
             if(i == AddrField){
                 uint32_t search_idex = (((uint32_t)search_id->tk[i]) << (8 * sizeof(MQ::token_t))) + search_id->tk[i+1];       
-                uint32_t found_idex = (((uint32_t)found_id->tk[i]) << (8 * sizeof(MQ::token_t))) + found_id->tk[i+1];       
+                uint32_t found_idex = (((uint32_t)found_id->tk[i]) << (8 * sizeof(MQ::token_t))) + found_id->tk[i+1];
+                MQ_DEBUG_TRACE("\r\n[MQLib]\t El token_%d es un campo de dirección, comparando %d vs %d", i, found_idex, search_idex);
                 // si ha llegado al final de la cadena de búsqueda sin errores, es que coincide...
                 if(search_idex == WildcardNotUsed){
                     return true;
@@ -753,6 +790,7 @@ protected:
                 i++;
             }
             else{
+            	MQ_DEBUG_TRACE("\r\n[MQLib]\t El token_%d es un campo normal, comparando %d vs %d", i, found_id->tk[i], search_id->tk[i]);
                 // si ha llegado al final de la cadena de búsqueda sin errores, es que coincide...
                 if(search_id->tk[i] == WildcardNotUsed){
                     return true;
@@ -831,7 +869,7 @@ public:
      *  @param len Tamaño máximo aceptado para el nombre
      *  @param id Identificador del topic
      */
-    static void getTopicName(char*name, uint8_t len, MQ::topic_t* id){
+    static void getTopicName(char *name, uint8_t len, MQ::topic_t* id){
         MQBroker::getTopicNameReq(name, len, id);
     }        
 
