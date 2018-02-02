@@ -8,7 +8,12 @@ pueden ser utilizadas en cualquier proyecto.
 ## Changelog
 
 ----------------------------------------------------------------------------------------------
+##### 02.02.2018 ->commit:"Incluyo componente ActiveModule"
+
+	
+----------------------------------------------------------------------------------------------
 ##### 02.02.2018 ->commit:"Importantes mejoras en MQLib y StateMachine"
+- [x] Incluyo componente ActiveModule
 - [x] Actualizaciones importantes tras portabilidad a ESP-IDF
 	
 ----------------------------------------------------------------------------------------------
