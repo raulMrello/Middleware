@@ -8,6 +8,11 @@ pueden ser utilizadas en cualquier proyecto.
 ## Changelog
 
 ----------------------------------------------------------------------------------------------
+##### 12.02.2018 ->commit:"Añado implementación de ActiveModule"
+- [x] Añado folder class_impl implementando una plantilla de ejemplo.
+
+	
+----------------------------------------------------------------------------------------------
 ##### 02.02.2018 ->commit:"Incluyo componente ActiveModule"
 
 	
