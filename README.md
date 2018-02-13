@@ -8,6 +8,11 @@ pueden ser utilizadas en cualquier proyecto.
 ## Changelog
 
 ----------------------------------------------------------------------------------------------
+##### 12.02.2018 ->commit:"Añado nuevos servicios de backup a ActiveModule"
+- [x] Añado checkIntegrity, saveConfig, restoreConfig, setDefaultConfig como miembros virtuales puros.
+
+	
+----------------------------------------------------------------------------------------------
 ##### 12.02.2018 ->commit:"Añado implementación de ActiveModule"
 - [x] Añado folder class_impl implementando una plantilla de ejemplo.
 

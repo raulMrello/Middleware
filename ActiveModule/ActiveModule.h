@@ -118,6 +118,28 @@ class ActiveModule : public StateMachine {
     virtual void publicationCb(const char* topic, int32_t result) = 0;
 
 
+   	/** Chequea la integridad de los datos de configuración <_cfg>. En caso de que algo no sea
+   	 * 	coherente, restaura a los valores por defecto y graba en memoria NV.
+   	 * 	@return True si la integridad es correcta, False si es incorrecta
+	 */
+	virtual bool checkIntegrity() = 0;
+
+
+   	/** Establece la configuración por defecto grabándola en memoria NV
+	 */
+	virtual void setDefaultConfig() = 0;
+
+
+   	/** Recupera la configuración de memoria NV
+	 */
+	virtual void restoreConfig() = 0;
+
+
+   	/** Graba la configuración en memoria NV
+	 */
+	virtual void saveConfig() = 0;
+
+
 	/** Graba un parámetro en la memoria NV
 	 * 	@param param_id Identificador del parámetro
 	 * 	@param data Datos asociados
