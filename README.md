@@ -8,6 +8,11 @@ pueden ser utilizadas en cualquier proyecto.
 ## Changelog
 
 ----------------------------------------------------------------------------------------------
+##### 13.02.2018 ->commit:"Mantengo repos independientes para StateMachine, MQLib y ActiveModule"
+- [x] Quito subproyectos
+
+	
+----------------------------------------------------------------------------------------------
 ##### 12.02.2018 ->commit:"Añado nuevos servicios de backup a ActiveModule"
 - [x] Añado checkIntegrity, saveConfig, restoreConfig, setDefaultConfig como miembros virtuales puros.
 
